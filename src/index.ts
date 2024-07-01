@@ -7,19 +7,19 @@ import { progress } from 'terminal-progress';
 import { isBuiltinModule, processFileWithReg, isAbsolutePath, isRelativePath } from './utils/index.ts';
 import logger, { LogLevel } from './utils/logger.ts';
 
-logger.setConfig({ prefix: 'ghost-dep-check', level: LogLevel.INFO });
 interface CheckConfig {
+  logLevel?: LogLevel;
   encoding?: BufferEncoding;
   excludeAlias?: string[];
 }
 
-const pkgSet = new Set<string>();
 enum ExtNames {
   vue = '.vue',
   ts = '.ts',
   js = '.js',
 }
 let checkConfig: CheckConfig = {
+  logLevel: 1,
   encoding: 'utf-8',
   excludeAlias: [],
 };
@@ -36,13 +36,13 @@ export async function processFile(filePath: string): Promise<Set<string>> | null
       case ExtNames.js:
         return await processJs(filePath);
       default:
-        logger.error('Unknown file type');
+        logger.warning(`Unknown file type: ${extname}`);
         return null;
     }
   } catch (err) {
-    logger.error(`Error processing file ${filePath}`);
+    logger.error(`Error when processing file: ${filePath}`);
     logger.error(err);
-    processFileWithReg(filePath, pkgSet);
+    return await processFileWithReg(filePath);
   }
 }
 
@@ -226,9 +226,15 @@ export async function ghostDepCheck(files: string[], pkgDefFiles: string[], user
   const ghostDepSet = new Set<string>();
   const config = Object.assign(checkConfig, userConfig || {});
 
+  // 1. 应用日志
+  logger.setConfig({ prefix: 'ghost-dep-check', level: config.logLevel });
+
+  // 2. 获取引用依赖
   const referPkgs = await getReferPkgs(files, config);
+  // 3. 获取已被定义的依赖
   const definedPkgs = await getDefinedPkgs(pkgDefFiles);
 
+  // 4. 对比依赖
   referPkgs.forEach(pkg => {
     if (!definedPkgs.has(pkg)) {
       ghostDepSet.add(pkg);
