@@ -1,32 +1,46 @@
 ### Install
 ```bash
-pnpm i terminal-progress
+pnpm i ghost-dep-check
 ```
 
 ### Usage
 ```ts
-import { progress } from 'terminal-progress'
+import { ghostDepCheck } from 'ghost-dep-check';
 
-let num = 0,
-  total = 200
-function renderProgress(name) {
-  if (num <= total) {
-    progress({ name: name, current: num, total: total })
+const config = {
+  excludeAlias: ['js', '@', '@components'],
+};
 
-    num++
-    setTimeout(function () {
-      renderProgress(name)
-    }, 10)
-  }
+function check() {
+  const directory = path.resolve('./');
+  const pattern = `${directory}/src/**/*.+(vue|js|ts)`;
+  glob(pattern, {
+    ignore: [
+      path.join(directory, '**/node_modules/**'),
+    ],
+  })
+    .then(async files => {
+      const pkgs = await ghostDepCheck(files, [path.join(directory, 'package.json')], config);
+
+      if (pkgs.size) {
+        console.log('The following deps maybe ghost deps: ', pkgs);
+      } else {
+        console.log('This project has no ghost dependencies.');
+      }
+    })
+    .catch(err => {
+      console.error('Error matching files:', err);
+    });
 }
 
-renderProgress('Process')
+check();
 ```
 
 ### Preview
 ```bash
 # in process
-⠼ Process: 174/200 | 87% [============================================>      ]
+⠼  Checking files: 174/200 | 87% [============================================>      ]
 # success
-✔ Process: 200/200 | 100% [==================================================]
+✔  Checking files: 200/200 | 100% [==================================================]
+This project has no ghost dependencies.
 ```
