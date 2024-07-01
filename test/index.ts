@@ -20,7 +20,7 @@ function test() {
     .then(async files => {
       const pkgs = await ghostDepCheck(files, [path.join(directory, 'package.json')], config);
 
-      if (pkgs.size) {
+      if (pkgs.length) {
         console.log('The following deps maybe ghost deps: ', pkgs);
       } else {
         console.log('This project has no ghost dependencies.');
