@@ -223,7 +223,7 @@ async function getReferPkgs(files: string[], config: CheckConfig): Promise<Set<s
  * @returns
  */
 export async function ghostDepCheck(files: string[], pkgDefFiles: string[], userConfig?: CheckConfig) {
-  const ghostDepSet = new Set<string>();
+  const ghostDepList: string[] = [];
   const config = Object.assign(checkConfig, userConfig || {});
 
   // 1. 应用日志
@@ -237,9 +237,9 @@ export async function ghostDepCheck(files: string[], pkgDefFiles: string[], user
   // 4. 对比依赖
   referPkgs.forEach(pkg => {
     if (!definedPkgs.has(pkg)) {
-      ghostDepSet.add(pkg);
+      ghostDepList.push(pkg);
     }
   });
 
-  return ghostDepSet;
+  return ghostDepList;
 }
