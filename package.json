@@ -1,6 +1,6 @@
 {
-  "name": "terminal-progress",
-  "version": "1.0.6",
+  "name": "ghost-dep-check",
+  "version": "1.0.0",
   "license": "MIT",
   "type": "module",
   "main": "./lib/index.js",
@@ -21,7 +21,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.14.9",
-    "ora": "^8.0.1",
+    "glob": "^10.4.2",
     "ts-node": "^10.9.2",
     "tslib": "^2.6.3",
     "typescript": "^5.5.2",
@@ -29,7 +29,10 @@
     "vite-plugin-dts": "^3.9.1"
   },
   "dependencies": {
-    "ora": "^8.0.1"
+    "@babel/parser": "^7.24.7",
+    "@babel/traverse": "^7.24.7",
+    "@vue/compiler-sfc": "^3.4.30",
+    "terminal-progress": "^1.0.6"
   },
-  "repository": "https://github.com/luwuer/terminal-progress"
+  "repository": "https://github.com/luwuer/ghost-dep-check"
 }

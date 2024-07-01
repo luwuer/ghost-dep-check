@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
+import pkgConfig from './package.json';
 
 export default defineConfig({
   plugins: [dts()],
@@ -14,12 +15,7 @@ export default defineConfig({
     },
     outDir: 'lib',
     rollupOptions: {
-      external: ['ora'],
-      output: {
-        globals: {
-          ora: 'ora',
-        },
-      },
+      external: Object.keys(pkgConfig.dependencies || {}),
     },
   },
 });
