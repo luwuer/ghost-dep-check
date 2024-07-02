@@ -1,9 +1,10 @@
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
+import { nodeResolve } from '@rollup/plugin-node-resolve';
 import pkgConfig from './package.json';
 
 export default defineConfig({
-  plugins: [dts()],
+  plugins: [dts(), nodeResolve()],
   build: {
     lib: {
       formats: ['es', 'umd'],
@@ -14,8 +15,9 @@ export default defineConfig({
       fileName: '[name]',
     },
     outDir: 'lib',
+    minify: false,
     rollupOptions: {
-      external: Object.keys(pkgConfig.dependencies || {}),
+      external: ['path', 'fs/promises', 'module', ...Object.keys(pkgConfig.dependencies || {})],
     },
   },
 });

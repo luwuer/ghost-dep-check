@@ -3,7 +3,7 @@
   "version": "1.0.4",
   "license": "MIT",
   "type": "module",
-  "main": "./lib/index.js",
+  "main": "./lib/index.umd.cjs",
   "module": "./lib/index.js",
   "files": [
     "lib"
@@ -23,6 +23,7 @@
     "test": "node --nolazy --loader ts-node/esm -r ts-node/register test/index.ts"
   },
   "devDependencies": {
+    "@rollup/plugin-node-resolve": "^15.2.3",
     "@types/node": "^20.14.9",
     "glob": "^10.4.2",
     "ts-node": "^10.9.2",
