@@ -236,7 +236,8 @@ export async function ghostDepCheck(files: string[], pkgDefFiles: string[], user
 
   // 4. 对比依赖
   referPkgs.forEach(pkg => {
-    if (!definedPkgs.has(pkg)) {
+    const pkgName = pkg.match(/^(?:@([^/]+)[/])?([^/]+)/)?.[0] || pkg;
+    if (!definedPkgs.has(pkgName)) {
       ghostDepList.push(pkg);
     }
   });
