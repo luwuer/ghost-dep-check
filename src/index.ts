@@ -11,6 +11,7 @@ interface CheckConfig {
   logLevel?: LogLevel;
   encoding?: BufferEncoding;
   excludeAlias?: string[];
+  name?: string;
 }
 
 enum ExtNames {
@@ -22,6 +23,7 @@ let checkConfig: CheckConfig = {
   logLevel: 1,
   encoding: 'utf-8',
   excludeAlias: [],
+  name: 'Checking files',
 };
 
 export async function processFile(filePath: string): Promise<Set<string>> | null {
@@ -157,6 +159,8 @@ async function processJs(filePath: string) {
  */
 function collectPkg(pkgs: Set<string>, appendPkgs: Set<string>, excludeReg: RegExp) {
   appendPkgs.forEach(pkgName => {
+    if (!pkgName) return;
+
     if (isBuiltinModule(pkgName) || isAbsolutePath(pkgName) || isRelativePath(pkgName)) return;
 
     if (/^\d+$/.test(pkgName)) return;
@@ -179,8 +183,15 @@ async function getDefinedPkgs(files: string[]): Promise<Set<string>> {
     const definedDataStr = await fsp.readFile(file, 'utf-8');
     const definedData = JSON.parse(definedDataStr);
     const dependencies = Object.keys(definedData.dependencies || {});
+    const devDependencies = Object.keys(definedData.devDependencies || {});
 
+    // dep
     dependencies.forEach(dep => {
+      pkgs.add(dep);
+    });
+
+    // dev dep
+    devDependencies.forEach(dep => {
       pkgs.add(dep);
     });
   }
@@ -195,12 +206,12 @@ async function getDefinedPkgs(files: string[]): Promise<Set<string>> {
  * @returns
  */
 async function getReferPkgs(files: string[], config: CheckConfig): Promise<Set<string>> {
-  const excludeAliasReg = new RegExp(`^(${config.excludeAlias.join('|')})\/`);
+  const excludeAliasReg = new RegExp(`^(${config.excludeAlias.join('|')})(\/|$)`);
   const referPkgs = new Set<string>();
   const total = files.length;
   let finish = 0;
 
-  progress({ name: 'Checking files', current: finish, total: total });
+  progress({ name: config.name, current: finish, total: total });
 
   for (const file of files) {
     const pkgs = await processFile(file);
@@ -209,7 +220,7 @@ async function getReferPkgs(files: string[], config: CheckConfig): Promise<Set<s
     }
 
     finish++;
-    progress({ name: 'Checking files', current: finish, total: total });
+    progress({ name: config.name, current: finish, total: total });
   }
 
   logger.debug('getReferPkgs: ', referPkgs);
