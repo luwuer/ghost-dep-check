@@ -3,13 +3,20 @@
   "version": "1.0.4",
   "license": "MIT",
   "type": "module",
-  "main": "./lib/index.umd.cjs",
+  "main": "./lib/index.cjs",
   "module": "./lib/index.js",
+  "exports": {
+    ".": {
+      "import": "./lib/index.js",
+      "require": "./lib/index.cjs",
+      "default": "./lib/index.js"
+    }
+  },
   "files": [
     "lib"
   ],
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=18.0.0"
   },
   "keywords": [
     "terminal",
@@ -36,7 +43,8 @@
     "@babel/parser": "^7.24.7",
     "@babel/traverse": "^7.24.7",
     "@vue/compiler-sfc": "^3.4.30",
-    "terminal-progress": "^1.0.6"
+    "axios": "^1.7.2",
+    "terminal-progress": "^1.0.10"
   },
   "repository": "https://github.com/luwuer/ghost-dep-check"
 }

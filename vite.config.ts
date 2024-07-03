@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [dts(), nodeResolve()],
   build: {
     lib: {
-      formats: ['es', 'umd'],
+      formats: ['es', 'cjs'],
       entry: {
         index: './src/index.ts',
       },

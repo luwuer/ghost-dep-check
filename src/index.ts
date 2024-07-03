@@ -89,7 +89,7 @@ async function processTs(filePath: string) {
   if (content) {
     const ast = parser.parse(content, {
       sourceType: 'unambiguous',
-      plugins: ['typescript', 'dynamicImport', 'exportDefaultFrom'],
+      plugins: ['typescript', 'dynamicImport', 'exportDefaultFrom', 'importAssertions'],
     });
 
     traverse.default(ast, {
@@ -226,12 +226,16 @@ export async function ghostDepCheck(files: string[], pkgDefFiles: string[], user
   const ghostDepList: string[] = [];
   const config = Object.assign(checkConfig, userConfig || {});
 
+  if (!files.length) {
+    return ghostDepList;
+  }
+
   // 1. 应用日志
   logger.setConfig({ prefix: 'ghost-dep-check', level: config.logLevel });
 
-  // 2. 获取引用依赖
+  // 2. 获取引用的依赖
   const referPkgs = await getReferPkgs(files, config);
-  // 3. 获取已被定义的依赖
+  // 3. 获取定义的依赖
   const definedPkgs = await getDefinedPkgs(pkgDefFiles);
 
   // 4. 对比依赖
