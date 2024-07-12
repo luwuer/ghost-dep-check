@@ -1,3 +1,4 @@
+import { builtinModules } from 'node:module';
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import { nodeResolve } from '@rollup/plugin-node-resolve';
@@ -17,7 +18,7 @@ export default defineConfig({
     outDir: 'lib',
     minify: false,
     rollupOptions: {
-      external: ['path', 'fs/promises', 'module', ...Object.keys(pkgConfig.dependencies || {})],
+      external: [...builtinModules, ...builtinModules.map(mod => `node:${mod}`), ...Object.keys(pkgConfig.dependencies || {})],
     },
   },
 });
