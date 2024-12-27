@@ -72,3 +72,13 @@ export function isRelativePath(pkgName: string) {
   const relativePathRegex = /^[.]/;
   return relativePathRegex.test(pkgName);
 }
+
+/**
+ * 标准化导入 Path
+ * @param pgkName
+ * @returns
+ */
+export function normalizePkgName(pgkName: string) {
+  const magicCommentsReg = /^\w*!+/;
+  return pgkName.replace(magicCommentsReg, '');
+}

@@ -5,11 +5,13 @@ import { parse } from '@vue/compiler-sfc';
 import parser, { ParseResult } from '@babel/parser';
 import traverse from '@babel/traverse';
 import { progress } from 'terminal-progress';
-import { isBuiltinModule, processFileWithReg, isAbsolutePath, isRelativePath } from './utils/index.ts';
+import { isBuiltinModule, processFileWithReg, isAbsolutePath, isRelativePath, normalizePkgName } from './utils/index.ts';
 import logger, { LogLevel } from './utils/logger.ts';
 
+type SpecialDepFunction = (file: string) => string[]
 interface CheckConfig {
   excludeAlias?: string[];
+  specialDepFunctions?: SpecialDepFunction[];
   name?: string;
   logLevel?: LogLevel;
   encoding?: BufferEncoding;
@@ -29,6 +31,7 @@ let checkConfig: CheckConfig = {
   logLevel: 1,
   encoding: 'utf-8',
   excludeAlias: [],
+  specialDepFunctions: [],
   name: 'Checking files',
 };
 
@@ -238,13 +241,13 @@ function getLegalPkgs(pgks: Set<string>, config: CheckConfigInt) {
   const excludeAliasReg = new RegExp(`^(${config.excludeAlias.join('|')})(\/|$)`);
   const legalPkgs = new Set<string>()
 
-  pgks.forEach(pkgName => {
-    if (!pkgName) return;
+  pgks.forEach(pkgStr => {
+    if (!pkgStr) return;
+
+    const pkgName = normalizePkgName(pkgStr);
 
     if (isBuiltinModule(pkgName) || isAbsolutePath(pkgName) || isRelativePath(pkgName)) return;
-
     if (/^\d+$/.test(pkgName)) return;
-
     if (excludeAliasReg.test(pkgName)) return;
 
     legalPkgs.add(pkgName);
@@ -259,15 +262,21 @@ function getLegalPkgs(pgks: Set<string>, config: CheckConfigInt) {
  * @param pkgJsonList 
  * @returns 
  */
-function getPkgDefFiles(file: string, pkgJsonList: string[]) {
+function getPkgDefFiles(file: string, pkgJsonList: string[], specialDepFunctions: SpecialDepFunction[]) {
   const defFiles: string[] = []
 
+  // 目录依赖
   pkgJsonList.forEach(pkgJsonItem => {
     const dirname = path.dirname(pkgJsonItem);
 
     if (file.indexOf(dirname) === 0) {
       defFiles.push(pkgJsonItem)
     }
+  })
+
+  // 特殊规则依赖
+  specialDepFunctions.forEach(func => {
+    defFiles.push(...func(file));
   })
 
   return defFiles
@@ -326,6 +335,7 @@ export async function ghostDepCheckInt(files: string[], userConfig: CheckConfigI
   // 1. 应用日志
   logger.setConfig({ prefix: 'ghost-dep-check', level: config.logLevel });
 
+  // 2. 获取 package 定义文件
   const pkgJsonList = await getPkgJsons(config.dir)
 
   progress({ name: config.name, current: finish, total: total });
@@ -335,8 +345,10 @@ export async function ghostDepCheckInt(files: string[], userConfig: CheckConfigI
     if (pkgs) {
       // 获取合法的引用包名
       const legalPkgs = getLegalPkgs(pkgs, config);
+      // 获取当前文件依赖的包定义文件
+      const pkgDefFiles = getPkgDefFiles(file, pkgJsonList, config.specialDepFunctions)
       // 获取当前文件位置定义过的包名
-      const definedPkgs = await getDefinedPkgs(getPkgDefFiles(file, pkgJsonList));
+      const definedPkgs = await getDefinedPkgs(pkgDefFiles);
 
       // 对比并记录未定义的包名
       legalPkgs.forEach(pkg => {
