@@ -1,17 +1,22 @@
 import * as fsp from 'fs/promises';
 import path from 'path';
+import { glob } from 'glob';
 import { parse } from '@vue/compiler-sfc';
-import parser from '@babel/parser';
+import parser, { ParseResult } from '@babel/parser';
 import traverse from '@babel/traverse';
 import { progress } from 'terminal-progress';
 import { isBuiltinModule, processFileWithReg, isAbsolutePath, isRelativePath } from './utils/index.ts';
 import logger, { LogLevel } from './utils/logger.ts';
 
 interface CheckConfig {
-  logLevel?: LogLevel;
-  encoding?: BufferEncoding;
   excludeAlias?: string[];
   name?: string;
+  logLevel?: LogLevel;
+  encoding?: BufferEncoding;
+}
+
+interface CheckConfigInt extends CheckConfig {
+  dir: string
 }
 
 enum ExtNames {
@@ -19,6 +24,7 @@ enum ExtNames {
   ts = '.ts',
   js = '.js',
 }
+
 let checkConfig: CheckConfig = {
   logLevel: 1,
   encoding: 'utf-8',
@@ -26,7 +32,12 @@ let checkConfig: CheckConfig = {
   name: 'Checking files',
 };
 
-export async function processFile(filePath: string): Promise<Set<string>> | null {
+let checkConfigInt: CheckConfigInt = {
+  dir: '',
+  ...checkConfig
+}
+
+async function processFile(filePath: string): Promise<Set<string>> | null {
   try {
     const extname = path.extname(filePath);
 
@@ -52,7 +63,7 @@ async function processVue(filePath: string) {
   const content = await fsp.readFile(filePath, checkConfig.encoding);
   const { descriptor } = parse(content);
   const jsContent = descriptor.script?.content || '';
-  const curPkgSet = new Set<string>();
+  let curPkgSet = new Set<string>();
 
   if (jsContent) {
     const ast = parser.parse(jsContent, {
@@ -60,25 +71,7 @@ async function processVue(filePath: string) {
       plugins: ['jsx', 'typescript', 'decorators', 'dynamicImport', 'exportDefaultFrom'],
     });
 
-    traverse.default(ast, {
-      ImportDeclaration(path: any) {
-        const pkgName = path.node.source.value;
-        curPkgSet.add(pkgName);
-      },
-      Import(path) {
-        if (path.parent.type === 'CallExpression' && path.parent.callee.type === 'Import') {
-          const pkgName = path.parent.arguments[0].value;
-          curPkgSet.add(pkgName);
-        }
-      },
-      CallExpression(path) {
-        if (path.node.callee.name === 'require' || path.node.callee.name === 'import') {
-          const arg = path.node.arguments[0];
-          const pkgName = arg.value;
-          curPkgSet.add(pkgName);
-        }
-      },
-    });
+    curPkgSet = traverseAst(ast)
   }
 
   return curPkgSet;
@@ -86,7 +79,7 @@ async function processVue(filePath: string) {
 
 async function processTs(filePath: string) {
   const content = await fsp.readFile(filePath, checkConfig.encoding);
-  const curPkgSet = new Set<string>();
+  let curPkgSet = new Set<string>();
 
   if (content) {
     const ast = parser.parse(content, {
@@ -94,33 +87,15 @@ async function processTs(filePath: string) {
       plugins: ['typescript', 'dynamicImport', 'exportDefaultFrom', 'importAssertions'],
     });
 
-    traverse.default(ast, {
-      ImportDeclaration(path: any) {
-        const pkgName = path.node.source.value;
-        curPkgSet.add(pkgName);
-      },
-      Import(path) {
-        if (path.parent.type === 'CallExpression' && path.parent.callee.type === 'Import') {
-          const pkgName = path.parent.arguments[0].value;
-          curPkgSet.add(pkgName);
-        }
-      },
-      CallExpression(path) {
-        if (path.node.callee.name === 'require' || path.node.callee.name === 'import') {
-          const arg = path.node.arguments[0];
-          const pkgName = arg.value;
-          curPkgSet.add(pkgName);
-        }
-      },
-    });
+    curPkgSet = traverseAst(ast)
   }
 
-  return curPkgSet;
+  return curPkgSet
 }
 
 async function processJs(filePath: string) {
   const content = await fsp.readFile(filePath, checkConfig.encoding);
-  const curPkgSet = new Set<string>();
+  let curPkgSet = new Set<string>();
 
   if (content) {
     const ast = parser.parse(content, {
@@ -128,28 +103,36 @@ async function processJs(filePath: string) {
       plugins: ['jsx', 'dynamicImport', 'exportDefaultFrom'],
     });
 
-    traverse.default(ast, {
-      ImportDeclaration(path: any) {
-        const pkgName = path.node.source.value;
-        curPkgSet.add(pkgName);
-      },
-      Import(path) {
-        if (path.parent.type === 'CallExpression' && path.parent.callee.type === 'Import') {
-          const pkgName = path.parent.arguments[0].value;
-          curPkgSet.add(pkgName);
-        }
-      },
-      CallExpression(path) {
-        if (path.node.callee.name === 'require' || path.node.callee.name === 'import') {
-          const arg = path.node.arguments[0];
-          const pkgName = arg.value;
-          curPkgSet.add(pkgName);
-        }
-      },
-    });
-
-    return curPkgSet;
+    curPkgSet = traverseAst(ast)
   }
+
+  return curPkgSet
+}
+
+function traverseAst(ast: ParseResult<any>): Set<string> {
+  const curPkgSet = new Set<string>();
+
+  traverse.default(ast, {
+    ImportDeclaration(path) {
+      const pkgName = path.node.source.value;
+      curPkgSet.add(pkgName);
+    },
+    Import(path) {
+      if (path.parent.type === 'CallExpression' && path.parent.callee.type === 'Import') {
+        const pkgName = path.parent.arguments[0].value;
+        curPkgSet.add(pkgName);
+      }
+    },
+    CallExpression(path) {
+      if (path.node.callee.name === 'require' || path.node.callee.name === 'import') {
+        const arg = path.node.arguments[0];
+        const pkgName = arg.value;
+        curPkgSet.add(pkgName);
+      }
+    },
+  });
+
+  return curPkgSet
 }
 
 /**
@@ -228,9 +211,73 @@ async function getReferPkgs(files: string[], config: CheckConfig): Promise<Set<s
 }
 
 /**
+ * 获取目录下所有的 package.json 路径
+ * @param baseDir
+ * @returns 
+ */
+async function getPkgJsons(baseDir: string): Promise<string[]> {
+  const pkgPattern = `${baseDir}/**/package.json`;
+  return glob(pkgPattern, {
+    ignore: [
+      path.join(baseDir, '**/node_modules/**'),
+    ],
+  })
+    .then(async (files) => {
+      if (!files.length) return [];
+      return files
+    })
+}
+
+/**
+ * 返回合法的包名
+ * @param pgks 
+ * @param config 
+ * @returns 
+ */
+function getLegalPkgs(pgks: Set<string>, config: CheckConfigInt) {
+  const excludeAliasReg = new RegExp(`^(${config.excludeAlias.join('|')})(\/|$)`);
+  const legalPkgs = new Set<string>()
+
+  pgks.forEach(pkgName => {
+    if (!pkgName) return;
+
+    if (isBuiltinModule(pkgName) || isAbsolutePath(pkgName) || isRelativePath(pkgName)) return;
+
+    if (/^\d+$/.test(pkgName)) return;
+
+    if (excludeAliasReg.test(pkgName)) return;
+
+    legalPkgs.add(pkgName);
+  });
+
+  return legalPkgs
+}
+
+/**
+ * 根据文件路径，获取可以为当前路径定义依赖的 package.json 文件
+ * @param file 
+ * @param pkgJsonList 
+ * @returns 
+ */
+function getPkgDefFiles(file: string, pkgJsonList: string[]) {
+  const defFiles: string[] = []
+
+  pkgJsonList.forEach(pkgJsonItem => {
+    const dirname = path.dirname(pkgJsonItem);
+
+    if (file.indexOf(dirname) === 0) {
+      defFiles.push(pkgJsonItem)
+    }
+  })
+
+  return defFiles
+}
+
+/**
  * 幽灵依赖检查
- * @param files
- * @param userConfig
+ * @param { Array<string> } files 需要检查的文件
+ * @param { Array<string> } pkgDefFiles 定义文件依赖的 package.json 
+ * @param { CheckConfig } userConfig
  * @returns
  */
 export async function ghostDepCheck(files: string[], pkgDefFiles: string[], userConfig?: CheckConfig) {
@@ -256,6 +303,53 @@ export async function ghostDepCheck(files: string[], pkgDefFiles: string[], user
       ghostDepList.push(pkg);
     }
   });
+
+  return ghostDepList;
+}
+
+/**
+ * 智能的幽灵依赖检查（根据每个文件的位置自动匹配依赖定义文件）
+ * @param { Array<string> } files 需要检查的文件
+ * @param { CheckConfigInt } userConfig
+ * @returns
+ */
+export async function ghostDepCheckInt(files: string[], userConfig: CheckConfigInt) {
+  const ghostDepList: string[] = [];
+  const config = Object.assign(checkConfigInt, userConfig || {});
+  const total = files.length;
+  let finish = 0;
+
+  if (!files.length) {
+    return ghostDepList;
+  }
+
+  // 1. 应用日志
+  logger.setConfig({ prefix: 'ghost-dep-check', level: config.logLevel });
+
+  const pkgJsonList = await getPkgJsons(config.dir)
+
+  progress({ name: config.name, current: finish, total: total });
+  for (const file of files) {
+    const pkgs = await processFile(file);
+
+    if (pkgs) {
+      // 获取合法的引用包名
+      const legalPkgs = getLegalPkgs(pkgs, config);
+      // 获取当前文件位置定义过的包名
+      const definedPkgs = await getDefinedPkgs(getPkgDefFiles(file, pkgJsonList));
+
+      // 对比并记录未定义的包名
+      legalPkgs.forEach(pkg => {
+        const pkgName = pkg.match(/^(?:@([^/]+)[/])?([^/]+)/)?.[0] || pkg;
+        if (!definedPkgs.has(pkgName)) {
+          ghostDepList.push(pkg);
+        }
+      });
+    }
+
+    finish++;
+    progress({ name: config.name, current: finish, total: total });
+  }
 
   return ghostDepList;
 }

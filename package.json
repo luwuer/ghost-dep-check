@@ -1,6 +1,6 @@
 {
   "name": "ghost-dep-check",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "license": "MIT",
   "type": "module",
   "main": "./lib/index.cjs",
@@ -27,12 +27,12 @@
   ],
   "scripts": {
     "build": "tsc && vite build",
-    "test": "node --nolazy --loader ts-node/esm -r ts-node/register test/index.ts"
+    "test": "node --nolazy --loader ts-node/esm -r ts-node/register test/index.ts",
+    "testInt": "node --nolazy --loader ts-node/esm -r ts-node/register test/testInt.ts"
   },
   "devDependencies": {
     "@rollup/plugin-node-resolve": "^15.2.3",
     "@types/node": "^20.14.9",
-    "glob": "^10.4.2",
     "ts-node": "^10.9.2",
     "tslib": "^2.6.3",
     "typescript": "^5.5.2",
@@ -44,6 +44,7 @@
     "@babel/traverse": "^7.24.7",
     "@vue/compiler-sfc": "^3.4.30",
     "axios": "^1.7.2",
+    "glob": "^10.4.2",
     "terminal-progress": "^1.0.10"
   },
   "repository": "https://github.com/luwuer/ghost-dep-check"
