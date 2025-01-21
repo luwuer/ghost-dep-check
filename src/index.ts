@@ -28,7 +28,7 @@ enum ExtNames {
 }
 
 let checkConfig: CheckConfig = {
-  logLevel: 1,
+  logLevel: LogLevel.INFO,
   encoding: 'utf-8',
   excludeAlias: [],
   specialDepFunctions: [],
@@ -199,15 +199,16 @@ async function getReferPkgs(files: string[], config: CheckConfig): Promise<Set<s
 
   progress({ name: config.name, current: finish, total: total });
 
-  for (const file of files) {
+  // 处理所有文件
+  await Promise.all(files.map(async (file) => {
     const pkgs = await processFile(file);
+    finish++;
+    progress({ name: config.name, current: finish, total: total });
+
     if (pkgs) {
       collectPkg(referPkgs, pkgs, excludeAliasReg);
     }
-
-    finish++;
-    progress({ name: config.name, current: finish, total: total });
-  }
+  }));
 
   logger.debug('getReferPkgs: ', referPkgs);
   return referPkgs;
