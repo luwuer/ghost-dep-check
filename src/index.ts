@@ -5,8 +5,10 @@ import { parse } from '@vue/compiler-sfc';
 import parser, { ParseResult } from '@babel/parser';
 import traverse from '@babel/traverse';
 import { progress } from 'terminal-progress';
-import { isBuiltinModule, processFileWithReg, isAbsolutePath, isRelativePath, normalizePkgName } from './utils/index.ts';
+import { isValidThirdPartyPkg, processFileWithReg, normalizePkgName } from './utils/index.ts';
 import logger, { LogLevel } from './utils/logger.ts';
+import { exportGhostDep } from './utils/export.ts'
+import { GhostDependencyMap } from './types/index.ts'
 
 type SpecialDepFunction = (file: string) => string[]
 interface CheckConfig {
@@ -139,25 +141,6 @@ function traverseAst(ast: ParseResult<any>): Set<string> {
 }
 
 /**
- * 收集包名
- * @param pkgName
- * @returns
- */
-function collectPkg(pkgs: Set<string>, appendPkgs: Set<string>, excludeReg: RegExp) {
-  appendPkgs.forEach(pkgName => {
-    if (!pkgName) return;
-
-    if (isBuiltinModule(pkgName) || isAbsolutePath(pkgName) || isRelativePath(pkgName)) return;
-
-    if (/^\d+$/.test(pkgName)) return;
-
-    if (excludeReg.test(pkgName)) return;
-
-    pkgs.add(pkgName);
-  });
-}
-
-/**
  * 从指定的 package.json 文件中获取明确依赖的包名
  * @param files
  * @returns
@@ -191,27 +174,42 @@ async function getDefinedPkgs(files: string[]): Promise<Set<string>> {
  * @param files
  * @returns
  */
-async function getReferPkgs(files: string[], config: CheckConfig): Promise<Set<string>> {
+async function getReferPkgs(files: string[], config: CheckConfig): Promise<[Set<string>, Map<string, string[]>]> {
   const excludeAliasReg = new RegExp(`^(${config.excludeAlias.join('|')})(\/|$)`);
   const referPkgs = new Set<string>();
+  const dependencyMap = new Map<string, string[]>();
   const total = files.length;
   let finish = 0;
 
   progress({ name: config.name, current: finish, total: total });
-
-  // 处理所有文件
   await Promise.all(files.map(async (file) => {
     const pkgs = await processFile(file);
+    
+    // 1. 更新进度
     finish++;
     progress({ name: config.name, current: finish, total: total });
 
-    if (pkgs) {
-      collectPkg(referPkgs, pkgs, excludeAliasReg);
-    }
+    if (!pkgs) return;
+
+    // 2. 保存引用包信息
+    pkgs.forEach(pkg => {
+      // 2.1 跳过非法第三方包名
+      if (!isValidThirdPartyPkg(pkg)) return;
+      // 2.2 跳过自定义配置忽略的包名
+      if (excludeAliasReg.test(pkg)) return;
+
+      // 2.3 收集包名
+      referPkgs.add(pkg);
+      // 2.4 收集依赖关系
+      if (!dependencyMap.has(pkg)) {
+        dependencyMap.set(pkg, []);
+      }
+      dependencyMap.get(pkg)!.push(file);
+    });
   }));
 
   logger.debug('getReferPkgs: ', referPkgs);
-  return referPkgs;
+  return [referPkgs, dependencyMap];
 }
 
 /**
@@ -246,9 +244,7 @@ function getLegalPkgs(pgks: Set<string>, config: CheckConfigInt) {
     if (!pkgStr) return;
 
     const pkgName = normalizePkgName(pkgStr);
-
-    if (isBuiltinModule(pkgName) || isAbsolutePath(pkgName) || isRelativePath(pkgName)) return;
-    if (/^\d+$/.test(pkgName)) return;
+    if(!isValidThirdPartyPkg(pkgName)) return
     if (excludeAliasReg.test(pkgName)) return;
 
     legalPkgs.add(pkgName);
@@ -291,28 +287,33 @@ function getPkgDefFiles(file: string, pkgJsonList: string[], specialDepFunctions
  * @returns
  */
 export async function ghostDepCheck(files: string[], pkgDefFiles: string[], userConfig?: CheckConfig) {
-  const ghostDepList: string[] = [];
+  const ghostDepMap: GhostDependencyMap = {};
   const config = Object.assign(checkConfig, userConfig || {});
 
   if (!files.length) {
-    return ghostDepList;
+    return [];
   }
 
   // 1. 应用日志
   logger.setConfig({ prefix: 'ghost-dep-check', level: config.logLevel });
 
-  // 2. 获取引用的依赖
-  const referPkgs = await getReferPkgs(files, config);
+  // 2. 获取引用的依赖和依赖映射
+  const [referPkgs, dependencyMap] = await getReferPkgs(files, config);
   // 3. 获取定义的依赖
   const definedPkgs = await getDefinedPkgs(pkgDefFiles);
 
-  // 4. 对比依赖
+  // 4. 对比依赖并记录使用位置
+  const ghostDepList: string[] = [];
   referPkgs.forEach(pkg => {
     const pkgName = pkg.match(/^(?:@([^/]+)[/])?([^/]+)/)?.[0] || pkg;
     if (!definedPkgs.has(pkgName)) {
       ghostDepList.push(pkg);
+      ghostDepMap[pkg] = dependencyMap.get(pkg) || [];
     }
   });
+
+  // 5. 导出 JSON 文件
+  await exportGhostDep(ghostDepMap)
 
   return ghostDepList;
 }
@@ -323,14 +324,12 @@ export async function ghostDepCheck(files: string[], pkgDefFiles: string[], user
  * @param { CheckConfigInt } userConfig
  * @returns
  */
-export async function ghostDepCheckInt(files: string[], userConfig: CheckConfigInt) {
-  const ghostDepList: string[] = [];
+export async function ghostDepCheckInt(files: string[], userConfig: CheckConfigInt): Promise<string[]> {
+  const ghostDepMap: GhostDependencyMap = {};
   const config = Object.assign(checkConfigInt, userConfig || {});
-  const total = files.length;
-  let finish = 0;
 
   if (!files.length) {
-    return ghostDepList;
+    return [];
   }
 
   // 1. 应用日志
@@ -339,7 +338,10 @@ export async function ghostDepCheckInt(files: string[], userConfig: CheckConfigI
   // 2. 获取 package 定义文件
   const pkgJsonList = await getPkgJsons(config.dir)
 
-  progress({ name: config.name, current: finish, total: total });
+  // 3. 获取引用的依赖和依赖映射
+  const [referPkgs, dependencyMap] = await getReferPkgs(files, config);
+
+  // 4. 处理每个文件的依赖
   for (const file of files) {
     const pkgs = await processFile(file);
 
@@ -355,14 +357,16 @@ export async function ghostDepCheckInt(files: string[], userConfig: CheckConfigI
       legalPkgs.forEach(pkg => {
         const pkgName = pkg.match(/^(?:@([^/]+)[/])?([^/]+)/)?.[0] || pkg;
         if (!definedPkgs.has(pkgName)) {
-          ghostDepList.push(pkg);
+          if (!ghostDepMap[pkg]) {
+            ghostDepMap[pkg] = dependencyMap.get(pkg) || [];
+          }
         }
       });
     }
-
-    finish++;
-    progress({ name: config.name, current: finish, total: total });
   }
 
-  return ghostDepList;
+  // 5. 导出 JSON 文件
+  await exportGhostDep(ghostDepMap)
+
+  return Object.keys(ghostDepMap);
 }

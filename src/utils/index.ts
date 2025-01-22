@@ -79,6 +79,19 @@ export function isRelativePath(pkgName: string) {
  * @returns
  */
 export function normalizePkgName(pgkName: string) {
+  // eg: import styles from 'style-loader!css-loader!./styles.css';
   const magicCommentsReg = /^\w*!+/;
   return pgkName.replace(magicCommentsReg, '');
+}
+
+/**
+ * 判断包名是否为有效的第三方依赖包名
+ * @param pkgName 包名
+ * @returns boolean
+ */
+export function isValidThirdPartyPkg(pkgName: string): boolean {
+  if (!pkgName || /^\d+$/.test(pkgName)) return false;
+  if (isBuiltinModule(pkgName) || isAbsolutePath(pkgName) || isRelativePath(pkgName)) return false;
+
+  return true;
 }
