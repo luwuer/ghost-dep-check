@@ -1,6 +1,6 @@
 {
   "name": "ghost-dep-check",
-  "version": "1.0.9",
+  "version": "1.0.11",
   "license": "MIT",
   "type": "module",
   "main": "./lib/index.cjs",

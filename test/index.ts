@@ -1,6 +1,6 @@
 import { glob } from 'glob';
 import * as path from 'path';
-import { ghostDepCheckInt } from '../src/index.ts';
+import { ghostDepCheck } from '../src/index.ts';
 // import { ghostDepCheck } from '../lib/index.js';
 
 const config = {
@@ -20,8 +20,7 @@ function test() {
     ],
   })
     .then(async files => {
-      const pkgs = await ghostDepCheckInt(files, config);
-      // const pkgs = await ghostDepCheck(files, [path.join(directory, 'package.json')], config);
+      const pkgs = await ghostDepCheck(files, [path.join(directory, 'package.json')], config);
 
       if (pkgs.length) {
         console.log('The following deps maybe ghost deps: ', pkgs);
